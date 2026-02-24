@@ -163,7 +163,7 @@ struct Index {
 
       /* ---------- Step 5：读取 Output PCM ---------- */
       const outputArr: number[] = ashmem.readFromAshmem(pcmBytes, HEADER_SIZE + pcmBytes);
-      const outputAb: ArrayBuffer = new Uint8Array(outputArr).buffer;
+      const outputAb = new Uint8Array(outputArr).buffer;
 
       ashmem.unmapAshmem();
       ashmem.closeAshmem();

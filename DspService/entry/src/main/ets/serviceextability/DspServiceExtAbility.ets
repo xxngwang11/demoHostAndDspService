@@ -81,7 +81,7 @@ class DspRemoteStub extends rpc.RemoteObject {
 
       /* ---- 读取 Input PCM（紧接 Header） ---- */
       const inputArr: number[] = ashmem.readFromAshmem(pcmBytes, HEADER_SIZE);
-      const inputAb: ArrayBuffer = new Uint8Array(inputArr).buffer;
+      const inputAb = new Uint8Array(inputArr).buffer;
 
       /* ---- 调用 C++ DSP 处理 ---- */
       const result: { outputBuffer: ArrayBuffer; processingTimeNs: number } =
