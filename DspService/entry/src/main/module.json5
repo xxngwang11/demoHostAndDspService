@@ -18,7 +18,7 @@
         "description": "$string:EntryAbility_desc",
         "label": "$string:EntryAbility_label",
         "startWindowBackground": "#FFFFFFFF",
-        "exported": false
+        "exported": true
       }
     ],
     "extensionAbilities": [
