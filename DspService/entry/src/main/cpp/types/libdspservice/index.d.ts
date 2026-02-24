@@ -4,7 +4,7 @@
  */
 
 /** Result object returned by processAudio() */
-export interface DspProcessResult {
+export class DspProcessResult {
   /** Processed float32 interleaved PCM (same byte size as input) */
   outputBuffer: ArrayBuffer;
   /** Wall-clock DSP processing duration in nanoseconds */
