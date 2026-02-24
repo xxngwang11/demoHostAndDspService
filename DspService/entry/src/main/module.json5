@@ -3,6 +3,7 @@
     "name": "entry",
     "type": "entry",
     "description": "$string:module_desc",
+    "mainElement": "DspServiceExtAbility",
     "deviceTypes": [
       "phone",
       "tablet"
@@ -14,7 +15,7 @@
         "name": "DspServiceExtAbility",
         "srcEntry": "./ets/serviceextability/DspServiceExtAbility.ets",
         "description": "$string:DspServiceExtAbility_desc",
-        "type": "service",
+        "type": "appService",
         "exported": true,
         "extensionProcessMode": "instance"
       }

@@ -90,7 +90,7 @@ demoHostAndDspService/
 | 共享内存 | `rpc.Ashmem.createAshmem` → 通过 `writeAshmem/readAshmem` 经 IPC 传递 fd |
 | 音频格式 | float32 interleaved PCM（内部），PCM-16 WAV（最终输出） |
 | DSP 算法 | `output = tanh(input × gain)`（soft clip 防溢出） |
-| 独立进程 | `module.json5` 中为 ServiceExtensionAbility 指定 `"process"` 字段 |
+| 独立进程 | DspService 和 HostApp 是不同 Bundle，天然运行在不同进程中 |
 
 ---
 
@@ -118,13 +118,12 @@ File → Open → 选择 DspService/
 
 ### 2. 配置签名
 
-> ⚠️ **重要**：`ServiceExtensionAbility` 跨 Bundle 连接在 OpenHarmony 上需要特定签名配置。
+> ⚠️ **重要**：`AppServiceExtensionAbility` 跨 Bundle 连接在 HarmonyOS 上需要标准调试签名（无需系统特权签名）。
 > 
 > - 在 DevEco Studio 中进入 **File → Project Structure → Signing Configs**，为两个工程分别配置调试签名（自动签名或自定义签名均可）。
 > - 若在真机上遇到权限拒绝，需确认：  
 >   1. 两个 HAP 使用同一签名证书（或受信任的证书链）；  
->   2. DspService 的 `module.json5` 中 ServiceExtensionAbility 已配置 `"exported": true`；  
->   3. 如设备为 OpenHarmony 标准版，可能需要在 `UnsgnedReleasedProfileTemplate.json` 中添加 `allowAppUsePrivilegeExtension: true`（参见官方文档）。
+>   2. DspService 的 `module.json5` 中 AppServiceExtensionAbility 已配置 `"exported": true`。
 
 ### 3. 安装 DspService（先安装）
 
@@ -194,7 +193,7 @@ hdc shell ps -ef | grep com.example.dspservice
 | IPC 请求失败，errCode=-1 | DspService 崩溃或拒绝连接 | 查看 DspService 的 hilog；检查 `exported: true` |
 | out.wav 无声或噪音 | gain=0 或参数异常 | 确认增益 > 0，旁通未误开 |
 | 找不到 out.wav | 写文件权限问题 | 文件写入 App 沙箱 `filesDir`，无需额外权限 |
-| 两个进程 PID 相同 | DspService 未正确配置独立进程 | 检查 `module.json5` 中的 `"process"` 字段 |
+| 两个进程 PID 相同 | DspService 与 HostApp 是不同 Bundle，正常情况下进程不同 | 确认两个工程均已安装且签名正确 |
 
 ---
 
@@ -206,7 +205,7 @@ hdc shell ps -ef | grep com.example.dspservice
 | `HostApp/.../Index.ets` | UI 逻辑，IPC 客户端，Ashmem 读写 |
 | `HostApp/.../audio_native.cpp` | 正弦波生成、Header 序列化、WAV 写入 |
 | `HostApp/.../napi_init.cpp` | N-API 桥接，暴露 3 个函数给 ArkTS |
-| `DspService/.../DspServiceExtAbility.ets` | IPC Stub，Ashmem 读写，调用 native |
+| `DspService/.../DspServiceExtAbility.ets` | IPC Stub（AppServiceExtensionAbility），Ashmem 读写，调用 native |
 | `DspService/.../dsp_processor.cpp` | 实际 DSP 算法（gain + tanh soft clip / bypass） |
 | `DspService/.../dsp_napi.cpp` | N-API 桥接，暴露 1 个函数给 ArkTS |
 
