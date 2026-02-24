@@ -5,6 +5,14 @@
       "value": "DspService entry module"
     },
     {
+      "name": "EntryAbility_desc",
+      "value": "DspService entry ability"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "DspService"
+    },
+    {
       "name": "DspServiceExtAbility_desc",
       "value": "Out-of-process audio DSP service"
     }
