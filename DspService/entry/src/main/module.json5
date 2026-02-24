@@ -28,7 +28,7 @@
         "description": "$string:DspServiceExtAbility_desc",
         "type": "appService",
         "exported": true,
-        "process": "dsp_proc"
+        "extensionProcessMode": "instance"
       }
     ]
   }

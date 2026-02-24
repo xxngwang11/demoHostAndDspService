@@ -90,7 +90,7 @@ demoHostAndDspService/
 | 共享内存 | `rpc.Ashmem.createAshmem` → 通过 `writeAshmem/readAshmem` 经 IPC 传递 fd |
 | 音频格式 | float32 interleaved PCM（内部），PCM-16 WAV（最终输出） |
 | DSP 算法 | `output = tanh(input × gain)`（soft clip 防溢出） |
-| 独立进程 | DspService 和 HostApp 是不同 Bundle，天然运行在不同进程中 |
+| 独立进程 | DspService 和 HostApp 是不同 Bundle，天然运行在不同进程中；使用 `extensionProcessMode: "instance"` 确保手机设备上的进程隔离（`process` 字段仅支持 PC/平板） |
 
 ---
 
