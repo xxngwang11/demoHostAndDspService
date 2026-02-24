@@ -67,7 +67,17 @@ struct Index {
         },
         onFailed: (code: number) => {
           hilog.error(0x0000, TAG, 'connectServiceExtensionAbility failed, code=%{public}d', code);
-          reject(new Error(`连接 DspService 失败，错误码: ${code}`));
+          let hint: string;
+          if (code === 16000002) {
+            hint = '错误码 16000002（AMS 类型检查失败）。排查步骤：\n'
+              + '① 确认 DspService 已安装且版本为最新（hdc uninstall com.example.dspservice，再重新安装）\n'
+              + '② 两个工程均须使用同一账号自动签名，且均以 Debug 模式构建（勿混用 Release HAP）\n'
+              + '③ 仅在 DevEco Studio 中运行/调试 HostApp；DspService 只需安装，无需同时开启调试会话\n'
+              + '④ 若以上均正确，尝试重启设备后再测试';
+          } else {
+            hint = `连接 DspService 失败，错误码: ${code}`;
+          }
+          reject(new Error(hint));
         },
       };
       this.connectionId = this.context.connectServiceExtensionAbility(want, opts);

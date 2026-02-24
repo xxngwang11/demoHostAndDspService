@@ -236,11 +236,44 @@ hdc shell ps -ef | grep com.example.dspservice
 
 ## 常见问题
 
+### ❓ 连接 DspService 失败，错误码 16000002
+
+错误码 16000002（`ERR_ABILITY_TYPE_INVALID`）由 AMS（Ability 管理服务）返回，表示"找到了目标 Ability，但类型不符"。  
+以下按可能性从高到低列出所有已知原因及解决方法：
+
+| # | 原因 | 验证方法 | 解决方法 |
+|---|------|----------|----------|
+| 1 | **Want 中包含 `moduleName` 字段** | 检查 `HostApp/Index.ets` 的 `connectDsp()` | 从 Want 中删除 `moduleName`，仅保留 `bundleName` + `abilityName` |
+| 2 | **DspService 旧版 HAP 仍在设备上**（注册信息未刷新）| `hdc shell bm dump -n com.example.dspservice` 检查 extensionAbilities | `hdc uninstall com.example.dspservice` 彻底卸载后重新安装 |
+| 3 | **两个 HAP 的 Debug/Release 模式不一致** | 检查 DevEco Studio 当前构建变体（左下角或 Build → Select Build Variant） | 两个工程均须以 **Debug** 模式构建签名；切勿将 Release HAP 与 Debug HAP 混合安装 |
+| 4 | **同时开启两个 DevEco Studio 调试会话** | 观察 DevEco Studio 是否为 DspService 也开了 Debug 标签页 | DspService 只需安装（Run 一次使其进设备即可），之后**仅在 HostApp 工程中**启动调试；DspService 无需保持调试状态 |
+| 5 | **设备 AMS 缓存未刷新** | 卸载重装后仍 16000002 | 完成上述步骤后**重启设备**，再重新安装并测试 |
+| 6 | **DspService 的 `module.json5` 中 `extensionProcessMode` 字段残留** | 检查 `DspService/entry/src/main/module.json5` | 删除 `extensionProcessMode` 字段（该字段仅用于同 Bundle 多实例场景，跨 Bundle 无效且会触发 16000002） |
+| 7 | **Hvigor 构建缓存损坏** | 清理后 rebuilt 报错 | DevEco Studio → **File → Invalidate Caches → Invalidate and Restart**，然后重新构建 |
+| 8 | **设备 HarmonyOS 版本不支持** | `hdc shell param get const.ohos.apiversion` 查看 API 版本 | `AppServiceExtensionAbility` 跨 Bundle 连接需要 HarmonyOS 5.0（API 12）或更高；旧版设备不支持 |
+
+#### 快速诊断命令
+
+```bash
+# 1. 确认 DspService 已安装且 DspServiceExtAbility 已注册
+hdc shell bm dump -n com.example.dspservice | grep -A5 "extensionAbilities"
+# 预期：看到 name: DspServiceExtAbility, type: appService, exported: true
+
+# 2. 确认两个进程已运行（DspService 连接时才会启动）
+hdc shell ps -ef | grep "com.example"
+
+# 3. 实时查看 AMS / HostApp 错误日志
+hdc shell hilog | grep -E "HostApp|AbilityManagerService|AMS"
+```
+
+---
+
+### 其他常见问题
+
 | 问题 | 原因 | 解决方法 |
 |------|------|----------|
 | 点击按钮后长时间显示"连接 DspService 失败" | DspService 未安装，或签名不匹配 | 先安装 DspService，确保签名配置正确 |
-| 连接 DspService 失败，错误码 16000002 | AMS 类型检查失败：通常因为 Want 包含了不该出现的 `moduleName`，或 DspService 未正确安装/签名 | 1) 确认 Want 中**不含** `moduleName`（仅填 `bundleName` + `abilityName`）；2) 先安装 DspService，再启动 HostApp；3) 确认两个 HAP 签名一致 |
-| IPC 请求失败，errCode=-1 | DspService 崩溃或拒绝连接 | 查看 DspService 的 hilog；检查 `exported: true` |
+| IPC 请求失败，错误码：-1 | DspService 崩溃或拒绝连接 | 查看 DspService 的 hilog；检查 `exported: true` |
 | out.wav 无声或噪音 | gain=0 或参数异常 | 确认增益 > 0，旁通未误开 |
 | 找不到 out.wav | 写文件权限问题 | 文件写入 App 沙箱 `filesDir`，无需额外权限 |
 | 两个进程 PID 相同 | DspService 与 HostApp 是不同 Bundle，正常情况下进程不同 | 确认两个工程均已安装且签名正确 |
