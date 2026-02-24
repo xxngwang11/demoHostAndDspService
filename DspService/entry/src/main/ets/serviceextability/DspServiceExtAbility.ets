@@ -35,12 +35,6 @@ const PROCESS_AUDIO_CODE = 1001;
 /** Ashmem 中 Header 固定大小（字节） */
 const HEADER_SIZE = 128;
 
-/** DSP 处理结果，对应 libdspservice.so processAudio 的返回值 */
-interface DspResult {
-  outputBuffer: ArrayBuffer;
-  processingTimeNs: number;
-}
-
 /* ------------------------------------------------------------------ */
 /*  IPC Stub                                                            */
 /* ------------------------------------------------------------------ */
@@ -90,8 +84,7 @@ class DspRemoteStub extends rpc.RemoteObject {
       const inputAb = new Uint8Array(inputArr).buffer;
 
       /* ---- 调用 C++ DSP 处理 ---- */
-      const result: DspResult =
-        dspNative.processAudio(inputAb, gain, bypass);
+      const result = dspNative.processAudio(inputAb, gain, bypass);
 
       const outputAb = result.outputBuffer;
       const processingTimeNs: number = result.processingTimeNs;
