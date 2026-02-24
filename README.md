@@ -90,7 +90,7 @@ demoHostAndDspService/
 | 共享内存 | `rpc.Ashmem.createAshmem` → 通过 `writeAshmem/readAshmem` 经 IPC 传递 fd |
 | 音频格式 | float32 interleaved PCM（内部），PCM-16 WAV（最终输出） |
 | DSP 算法 | `output = tanh(input × gain)`（soft clip 防溢出） |
-| 独立进程 | DspService 和 HostApp 是不同 Bundle，天然运行在不同进程中；使用 `extensionProcessMode: "instance"` 确保手机设备上的进程隔离（`process` 字段仅支持 PC/平板） |
+| 独立进程 | DspService 和 HostApp 是不同 Bundle，天然运行在不同进程中（`process` 字段仅支持 PC/平板；`extensionProcessMode` 用于同 Bundle 内多实例场景，跨 Bundle 无需配置） |
 
 ---
 
@@ -190,6 +190,7 @@ hdc shell ps -ef | grep com.example.dspservice
 | 问题 | 原因 | 解决方法 |
 |------|------|----------|
 | 点击按钮后长时间显示"连接 DspService 失败" | DspService 未安装，或签名不匹配 | 先安装 DspService，确保签名配置正确 |
+| 连接 DspService 失败，错误码 16000002 | AMS 类型检查失败：通常因为 Want 包含了不该出现的 `moduleName`，或 DspService 未正确安装/签名 | 1) 确认 Want 中**不含** `moduleName`（仅填 `bundleName` + `abilityName`）；2) 先安装 DspService，再启动 HostApp；3) 确认两个 HAP 签名一致 |
 | IPC 请求失败，errCode=-1 | DspService 崩溃或拒绝连接 | 查看 DspService 的 hilog；检查 `exported: true` |
 | out.wav 无声或噪音 | gain=0 或参数异常 | 确认增益 > 0，旁通未误开 |
 | 找不到 out.wav | 写文件权限问题 | 文件写入 App 沙箱 `filesDir`，无需额外权限 |
