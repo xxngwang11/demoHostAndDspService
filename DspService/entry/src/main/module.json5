@@ -15,9 +15,8 @@
         "name": "DspServiceExtAbility",
         "srcEntry": "./ets/serviceextability/DspServiceExtAbility.ets",
         "description": "$string:DspServiceExtAbility_desc",
-        "type": "service",
-        "exported": true,
-        "process": "com.example.dspservice.dsp_proc"
+        "type": "appService",
+        "exported": true
       }
     ]
   }
