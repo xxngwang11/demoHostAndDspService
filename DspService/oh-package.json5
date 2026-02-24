@@ -1,0 +1,13 @@
+{
+  "modelVersion": "5.0.0",
+  "description": "DspService — out-of-process audio DSP service (service side)",
+  "packages": "",
+  "install": {
+    "registryUrl": "https://ohpm.openharmony.cn/ohpm/"
+  },
+  "license": "Apache-2.0",
+  "devDependencies": {},
+  "author": "",
+  "name": "dspservice",
+  "dependencies": {}
+}

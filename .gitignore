@@ -1,0 +1,24 @@
+# Build artifacts and IDE files
+.idea/
+.gradle/
+build/
+node_modules/
+oh_modules/
+.hvigor/
+.cxx/
+
+# Compiled outputs
+*.hap
+*.har
+*.app
+*.apk
+
+# Signing keys (never commit)
+*.p12
+*.cer
+*.pem
+
+# DevEco Studio project caches
+.DS_Store
+Thumbs.db
+local.properties

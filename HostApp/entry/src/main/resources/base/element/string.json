@@ -1,0 +1,16 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "HostApp entry module"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "Offline audio processing demo host"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "HostApp"
+    }
+  ]
+}

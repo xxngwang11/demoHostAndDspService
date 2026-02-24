@@ -1,0 +1,23 @@
+{
+  "module": {
+    "name": "entry",
+    "type": "entry",
+    "description": "$string:module_desc",
+    "deviceTypes": [
+      "phone",
+      "tablet"
+    ],
+    "deliveryWithInstall": true,
+    "installationFree": false,
+    "extensionAbilities": [
+      {
+        "name": "DspServiceExtAbility",
+        "srcEntry": "./ets/serviceextability/DspServiceExtAbility.ets",
+        "description": "$string:DspServiceExtAbility_desc",
+        "type": "service",
+        "exported": true,
+        "process": "com.example.dspservice.dsp_proc"
+      }
+    ]
+  }
+}

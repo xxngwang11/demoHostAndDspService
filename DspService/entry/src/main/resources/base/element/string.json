@@ -1,0 +1,12 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "DspService entry module"
+    },
+    {
+      "name": "DspServiceExtAbility_desc",
+      "value": "Out-of-process audio DSP service"
+    }
+  ]
+}
