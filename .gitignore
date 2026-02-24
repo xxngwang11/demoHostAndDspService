@@ -22,3 +22,6 @@ oh_modules/
 .DS_Store
 Thumbs.db
 local.properties
+
+# CodeQL tool artifacts
+_codeql_detected_source_root
