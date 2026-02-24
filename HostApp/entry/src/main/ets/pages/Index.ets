@@ -53,6 +53,7 @@ struct Index {
     return new Promise<void>((resolve, reject) => {
       const want: Want = {
         bundleName: DSP_BUNDLE_NAME,
+        moduleName: 'entry',
         abilityName: DSP_ABILITY_NAME,
       };
       const opts: common.ConnectOptions = {
