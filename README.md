@@ -116,16 +116,65 @@ File → Open → 选择 DspService/
 
 > 两个工程相互独立，分别编译、签名、安装。
 
-### 2. 配置签名
+### 2. 配置签名（两个工程必须使用同一证书）
 
-> ⚠️ **重要**：`AppServiceExtensionAbility` 跨 Bundle 连接在 HarmonyOS 上需要标准调试签名（无需系统特权签名）。
-> 
-> - 在 DevEco Studio 中进入 **File → Project Structure → Signing Configs**，为两个工程分别配置调试签名（自动签名或自定义签名均可）。
-> - 若在真机上遇到权限拒绝，需确认：  
->   1. 两个 HAP 使用同一签名证书（或受信任的证书链）；  
->   2. DspService 的 `module.json5` 中 AppServiceExtensionAbility 已配置 `"exported": true`。
+> ⚠️ **重要**：`AppServiceExtensionAbility` 跨 Bundle 连接要求调用方（HostApp）与服务方（DspService）**使用同一签名证书**。证书不一致会导致连接被系统拒绝。以下提供两种方案，推荐方案一。
 
-### 3. 安装 DspService（先安装）
+#### 方案一：DevEco Studio 自动签名（推荐）
+
+两个工程均使用同一个华为开发者账号进行自动签名，系统会自动为同一账号下的所有工程颁发来自同一根证书的调试证书。
+
+**操作步骤**（两个工程分别执行，账号必须相同）：
+
+1. 打开 HostApp 工程，依次进入：  
+   **File → Project Structure → Project → Signing Configs**
+2. 勾选 **"Automatically generate signature"**
+3. 点击 **"Sign In"**，登录华为开发者账号（若已登录则跳过）
+4. DevEco Studio 自动生成并填入 `Store file`、`Store password`、`Key alias`、`Key password`、`Profile file`、`Certpath file`
+5. 点击 **OK** 保存
+6. **切换到 DspService 工程**，用**同一账号**重复步骤 1–5
+
+> **验证**：两个工程自动签名后，在各自的 `build/outputs/default/` 目录下会生成 `entry-default-signed.hap`。可通过以下命令确认证书指纹一致：
+> ```bash
+> # 解压两个 HAP（HAP 本质是 zip 文件）并对比证书
+> unzip -p HostApp/entry/build/default/outputs/default/entry-default-signed.hap META-INF/CERT.RSA | \
+>   keytool -printcert -v 2>/dev/null | grep "SHA256:"
+>
+> unzip -p DspService/entry/build/default/outputs/default/entry-default-signed.hap META-INF/CERT.RSA | \
+>   keytool -printcert -v 2>/dev/null | grep "SHA256:"
+> # 两行 SHA256 指纹应完全一致
+> ```
+
+#### 方案二：手动共享同一密钥库（离线 / CI 环境）
+
+当无法使用自动签名（如 CI 流水线、无网环境）时，手动让两个工程引用同一个 `.p12` 密钥库文件。
+
+**步骤**：
+
+1. 在 HostApp 工程中，首次运行自动签名后，DevEco Studio 会在本地生成密钥库，默认路径为：
+   ```
+   %USERPROFILE%\.ohos\config\default\<账号ID>\<项目名>\entry\debug.p12   （Windows）
+   ~/.ohos/config/default/<账号ID>/<项目名>/entry/debug.p12               （macOS/Linux）
+   ```
+2. 将上述 `.p12`、对应的 `.cer`（证书文件）和 `.p7b`（Profile 文件）**复制到两个工程均可访问的公共目录**，例如仓库根目录下的 `signing/` 文件夹（**切勿提交到 Git，已在 `.gitignore` 中排除**）
+3. 在 HostApp 工程中进入 **File → Project Structure → Signing Configs**，**取消**勾选自动签名，手动填入：
+   - `Store file`：指向共享的 `.p12` 文件
+   - `Store password` / `Key alias` / `Key password`：与生成时一致
+   - `Profile file`：指向共享的 `.p7b` 文件
+   - `Certpath file`：指向共享的 `.cer` 文件
+4. 在 **DspService 工程**中重复步骤 3，指向**完全相同**的文件
+
+**安全提示**：密钥库文件包含私钥，**不得提交到版本控制系统**。请在 `.gitignore` 中保留：
+```
+signing/
+*.p12
+*.cer
+*.p7b
+```
+
+#### 安装顺序
+
+两种签名方案配置完成后，均须**先安装 DspService，再安装 HostApp**：
 
 ```bash
 hdc install DspService/entry/build/default/outputs/default/entry-default-signed.hap
@@ -133,7 +182,7 @@ hdc install DspService/entry/build/default/outputs/default/entry-default-signed.
 
 或在 DevEco Studio 中直接 **Run** DspService 工程（Ability 为 DspServiceExtAbility，无 UI，安装即可）。
 
-### 4. 安装并运行 HostApp
+### 3. 安装并运行 HostApp
 
 ```bash
 hdc install HostApp/entry/build/default/outputs/default/entry-default-signed.hap
@@ -142,7 +191,7 @@ hdc shell aa start -a EntryAbility -b com.example.hostapp
 
 或在 DevEco Studio 中直接 **Run** HostApp 工程。
 
-### 5. 操作界面
+### 4. 操作界面
 
 1. 打开 HostApp，看到参数输入界面；
 2. 按需调整采样率（默认 44100）、帧数（默认 44100，即 1 秒）、增益（默认 0.5）、旁通开关；

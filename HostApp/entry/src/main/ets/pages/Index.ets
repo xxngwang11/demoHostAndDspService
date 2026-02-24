@@ -146,7 +146,7 @@ struct Index {
 
       if (rr.errCode !== 0) {
         rr.reply.reclaim();
-        throw new Error(`IPC 请求失败，errCode=${rr.errCode}`);
+        throw new Error(`IPC 请求失败，错误码：${rr.errCode}`);
       }
 
       const dspStatus = rr.reply.readInt();
@@ -156,7 +156,7 @@ struct Index {
       rr.reply.reclaim();
 
       if (dspStatus !== 0) {
-        throw new Error(`DspService 处理失败，status=${dspStatus}`);
+        throw new Error(`DspService 处理失败，状态码：${dspStatus}`);
       }
 
       hilog.info(0x0000, TAG, 'IPC done, dspTimeNs=%{public}d ipcMs=%{public}d', dspTimeNs, ipcMs);
