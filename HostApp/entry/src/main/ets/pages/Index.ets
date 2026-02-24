@@ -69,11 +69,21 @@ struct Index {
           hilog.error(0x0000, TAG, 'connectServiceExtensionAbility failed, code=%{public}d', code);
           let hint: string;
           if (code === 16000002) {
-            hint = '错误码 16000002（AMS 类型检查失败）。排查步骤：\n'
-              + '① 确认 DspService 已安装且版本为最新（hdc uninstall com.example.dspservice，再重新安装）\n'
-              + '② 两个工程均须使用同一账号自动签名，且均以 Debug 模式构建（勿混用 Release HAP）\n'
-              + '③ 仅在 DevEco Studio 中运行/调试 HostApp；DspService 只需安装，无需同时开启调试会话\n'
-              + '④ 若以上均正确，尝试重启设备后再测试';
+            // Internal AMS error 2097170 (AAFWK errNo=18, ability_context_impl.cpp:1599)
+            // maps to this public code. Causes (in priority order):
+            // A) Provisioning Profile of DspService missing "AppService" service capability
+            // B) Both HAPs not signed under the same developer appid
+            // C) connectServiceExtensionAbility / AMS type routing gap on older firmware
+            hint = '错误码 16000002（AMS 内部错误 2097170，跨 Bundle 连接鉴权失败）。\n'
+              + '最常见原因及解法：\n'
+              + '① 【Profile 缺少 AppService 能力】在华为开发者控制台为 DspService 应用开启 "AppService 服务" 能力，\n'
+              + '   重新申请 Profile（.p7b），重新自动签名并重装 DspService。\n'
+              + '② 【两个工程 appid 不一致】两个工程必须登录同一华为开发者账号自动签名，\n'
+              + '   且在开发者控制台属于同一个"项目"，确保 appIdentifier 相同。\n'
+              + '③ 【设备固件过旧】检查固件版本：hdc shell param get hw_sc.build.os.version\n'
+              + '   AppServiceExtensionAbility 跨 Bundle 连接需要 HarmonyOS 5.0.0.700 及以上版本。\n'
+              + '④ 【先安装 DspService 再安装 HostApp，仅调试 HostApp】\n'
+              + '   DspService 只需 Run 安装一次，不要同时保持两个 Studio 调试会话。';
           } else {
             hint = `连接 DspService 失败，错误码: ${code}`;
           }

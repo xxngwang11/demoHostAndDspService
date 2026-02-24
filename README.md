@@ -268,6 +268,75 @@ hdc shell hilog | grep -E "HostApp|AbilityManagerService|AMS"
 
 ---
 
+### 🔍 日志中出现 `[ability_context_impl.cpp:1599] failed 2097170` 的深度分析
+
+如果在 hilog 中看到类似以下日志：
+
+```
+W ability_context_impl.cpp:1599 failed 2097170
+```
+
+紧接着触发 `onFailed(16000002)`，说明问题**不是**简单的类型字段配置错误，而是 AMS 在跨 Bundle 鉴权层面拒绝了连接。
+
+#### 错误码解析
+
+```
+内部错误 2097170 = 0x200012
+= AAFWK 子系统(1) × 2^21 + module(0) × 2^16 + errNo(18)
+= AMS 模块 errNo=18 = ERR_CROSS_BUNDLE_CONNECT_PERMISSION_DENIED
+                       （跨 Bundle 连接权限/鉴权失败）
+```
+
+此错误由 `ability_context_impl.cpp` 内的 `ConnectServiceExtensionAbility` 向 AMS 发起跨进程调用时，AMS 内部鉴权逻辑返回后记录在日志，最终映射至公开 API 错误码 **16000002**。
+
+#### 最终根因清单（已排除前 8 项后仍 2097170）
+
+| 优先级 | 根因 | 说明 |
+|--------|------|------|
+| ⭐⭐⭐ | **DspService 的签名 Profile（.p7b）缺少 "AppService 服务" 能力（capability）** | `AppServiceExtensionAbility` 需要在华为开发者控制台为应用开启 **AppService 服务能力**，自动签名的 Profile 才会包含对应 entitlement。若 Profile 缺少此 capability，AMS 会以 errNo=18 拒绝跨 Bundle 连接。 |
+| ⭐⭐⭐ | **两个工程的 `appIdentifier` 不一致** | AMS 对 `AppServiceExtensionAbility` 跨 Bundle 连接会校验调用方与服务方的开发者身份（`appIdentifier`，来自签名证书）。若两工程在开发者控制台属于不同"项目"或使用了不同账号自动签名，`appIdentifier` 不同，鉴权失败。 |
+| ⭐⭐ | **设备固件版本过旧** | `connectServiceExtensionAbility` 内部以 `ExtensionAbilityType::SERVICE` 向 AMS 查询，早期 HarmonyOS 5.0.x 构建（< 5.0.0.700）的 AMS 未将 `APP_SERVICE` 类型纳入此路由，导致能力找不到并以 2097170 返回。 |
+| ⭐ | **调试模式下 Profile 校验更严格** | 部分设备在调试签名场景下会额外校验 Profile 内容完整性；若 Profile 无效或已过期（自动签名 Profile 通常有效期 1 年），连接会被拒绝。 |
+
+#### 解决步骤（针对 2097170）
+
+**方案一：为 DspService 开启 AppService 能力（最可能有效）**
+
+1. 登录 [华为开发者控制台](https://developer.huawei.com/consumer/cn/)
+2. 进入 **项目** → **应用（com.example.dspservice）** → **能力** → **服务能力**
+3. 找到并开启 **"AppService 服务"** 能力（如页面无此选项，说明当前项目类型不支持，需创建 HarmonyOS 应用项目）
+4. 回到 DevEco Studio，在 **DspService 工程** 中重新执行 **File → Project Structure → Signing Configs → Automatically generate signature**（重新生成包含新能力的 Profile）
+5. 重新构建并重装 DspService：
+
+   ```bash
+   hdc uninstall com.example.dspservice
+   # DevEco Studio Run DspService，或手动安装新 HAP
+   ```
+
+**方案二：核查 appIdentifier 是否一致**
+
+```bash
+# 解压 HostApp HAP（HAP 是 zip 文件），检查签名证书中的 appIdentifier
+unzip -p HostApp/entry/build/default/outputs/default/entry-default-signed.hap \
+  META-INF/CERT.RSA | keytool -printcert -v 2>/dev/null | grep -i "subject\|appidentifier"
+
+# 解压 DspService HAP，做同样检查
+unzip -p DspService/entry/build/default/outputs/default/entry-default-signed.hap \
+  META-INF/CERT.RSA | keytool -printcert -v 2>/dev/null | grep -i "subject\|appidentifier"
+# 两个输出中的 appIdentifier 字段必须完全一致
+```
+
+**方案三：更新设备固件**
+
+```bash
+# 检查当前系统版本
+hdc shell param get hw_sc.build.os.version
+# AppServiceExtensionAbility 跨 Bundle 连接需要 HarmonyOS 5.0.0.700 及以上
+# 若版本过旧，通过设备"设置 → 系统 → 软件更新"升级到最新版本
+```
+
+---
+
 ### 其他常见问题
 
 | 问题 | 原因 | 解决方法 |
