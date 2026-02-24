@@ -1,0 +1,9 @@
+{
+  "name": "libhostapp.so",
+  "version": "1.0.0",
+  "description": "HostApp native library type declarations",
+  "main": "index.d.ts",
+  "author": "",
+  "license": "Apache-2.0",
+  "keywords": []
+}
