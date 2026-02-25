@@ -17,6 +17,8 @@ oh_modules/
 *.p12
 *.cer
 *.pem
+*.p7b
+signing/
 
 # DevEco Studio project caches
 .DS_Store

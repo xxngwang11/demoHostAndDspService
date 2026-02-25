@@ -32,6 +32,11 @@
           }
         ]
       }
+    ],
+    "requestPermissions": [
+      {
+        "name": "ohos.permission.CONNECT_APP_SERVICE_EXTENSION_ABILITY"
+      }
     ]
   }
 }

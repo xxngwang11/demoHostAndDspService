@@ -86,11 +86,13 @@ demoHostAndDspService/
 | 方面 | 技术选型 |
 |------|----------|
 | ArkTS ↔ C++ 桥接 | N-API（OpenHarmony 标准方式） |
-| IPC 机制 | `rpc.MessageSequence` + `ServiceExtensionAbility` |
+| IPC 机制 | `rpc.MessageSequence` + `AppServiceExtensionAbility`（type: `"appService"`） |
 | 共享内存 | `rpc.Ashmem.createAshmem` → 通过 `writeAshmem/readAshmem` 经 IPC 传递 fd |
 | 音频格式 | float32 interleaved PCM（内部），PCM-16 WAV（最终输出） |
 | DSP 算法 | `output = tanh(input × gain)`（soft clip 防溢出） |
-| 独立进程 | DspService 和 HostApp 是不同 Bundle，天然运行在不同进程中 |
+| 独立进程 | DspService 和 HostApp 是不同 Bundle，天然运行在不同进程中（`process` 字段仅支持 PC/平板；`extensionProcessMode` 用于同 Bundle 内多实例场景，跨 Bundle 无需配置） |
+| 服务类型 | `AppServiceExtensionAbility`（三方应用）；`ServiceExtensionAbility` 仅面向系统应用，三方应用不可使用 |
+| 连接权限 | HostApp `module.json5` 声明 `ohos.permission.CONNECT_APP_SERVICE_EXTENSION_ABILITY`（normal 级，system_grant，无需用户弹窗，无需开发者控制台审批） |
 
 ---
 
@@ -116,16 +118,65 @@ File → Open → 选择 DspService/
 
 > 两个工程相互独立，分别编译、签名、安装。
 
-### 2. 配置签名
+### 2. 配置签名（两个工程必须使用同一证书）
 
-> ⚠️ **重要**：`AppServiceExtensionAbility` 跨 Bundle 连接在 HarmonyOS 上需要标准调试签名（无需系统特权签名）。
-> 
-> - 在 DevEco Studio 中进入 **File → Project Structure → Signing Configs**，为两个工程分别配置调试签名（自动签名或自定义签名均可）。
-> - 若在真机上遇到权限拒绝，需确认：  
->   1. 两个 HAP 使用同一签名证书（或受信任的证书链）；  
->   2. DspService 的 `module.json5` 中 AppServiceExtensionAbility 已配置 `"exported": true`。
+> ⚠️ **重要**：`AppServiceExtensionAbility` 跨 Bundle 连接要求调用方（HostApp）与服务方（DspService）**使用同一签名证书**。证书不一致会导致连接被系统拒绝。以下提供两种方案，推荐方案一。
 
-### 3. 安装 DspService（先安装）
+#### 方案一：DevEco Studio 自动签名（推荐）
+
+两个工程均使用同一个华为开发者账号进行自动签名，系统会自动为同一账号下的所有工程颁发来自同一根证书的调试证书。
+
+**操作步骤**（两个工程分别执行，账号必须相同）：
+
+1. 打开 HostApp 工程，依次进入：  
+   **File → Project Structure → Project → Signing Configs**
+2. 勾选 **"Automatically generate signature"**
+3. 点击 **"Sign In"**，登录华为开发者账号（若已登录则跳过）
+4. DevEco Studio 自动生成并填入 `Store file`、`Store password`、`Key alias`、`Key password`、`Profile file`、`Certpath file`
+5. 点击 **OK** 保存
+6. **切换到 DspService 工程**，用**同一账号**重复步骤 1–5
+
+> **验证**：两个工程自动签名后，在各自的 `build/outputs/default/` 目录下会生成 `entry-default-signed.hap`。可通过以下命令确认证书指纹一致：
+> ```bash
+> # 解压两个 HAP（HAP 本质是 zip 文件）并对比证书
+> unzip -p HostApp/entry/build/default/outputs/default/entry-default-signed.hap META-INF/CERT.RSA | \
+>   keytool -printcert -v 2>/dev/null | grep "SHA256:"
+>
+> unzip -p DspService/entry/build/default/outputs/default/entry-default-signed.hap META-INF/CERT.RSA | \
+>   keytool -printcert -v 2>/dev/null | grep "SHA256:"
+> # 两行 SHA256 指纹应完全一致
+> ```
+
+#### 方案二：手动共享同一密钥库（离线 / CI 环境）
+
+当无法使用自动签名（如 CI 流水线、无网环境）时，手动让两个工程引用同一个 `.p12` 密钥库文件。
+
+**步骤**：
+
+1. 在 HostApp 工程中，首次运行自动签名后，DevEco Studio 会在本地生成密钥库，默认路径为：
+   ```
+   %USERPROFILE%\.ohos\config\default\<账号ID>\<项目名>\entry\debug.p12   （Windows）
+   ~/.ohos/config/default/<账号ID>/<项目名>/entry/debug.p12               （macOS/Linux）
+   ```
+2. 将上述 `.p12`、对应的 `.cer`（证书文件）和 `.p7b`（Profile 文件）**复制到两个工程均可访问的公共目录**，例如仓库根目录下的 `signing/` 文件夹（**切勿提交到 Git，已在 `.gitignore` 中排除**）
+3. 在 HostApp 工程中进入 **File → Project Structure → Signing Configs**，**取消**勾选自动签名，手动填入：
+   - `Store file`：指向共享的 `.p12` 文件
+   - `Store password` / `Key alias` / `Key password`：与生成时一致
+   - `Profile file`：指向共享的 `.p7b` 文件
+   - `Certpath file`：指向共享的 `.cer` 文件
+4. 在 **DspService 工程**中重复步骤 3，指向**完全相同**的文件
+
+**安全提示**：密钥库文件包含私钥，**不得提交到版本控制系统**。请在 `.gitignore` 中保留：
+```
+signing/
+*.p12
+*.cer
+*.p7b
+```
+
+#### 安装顺序
+
+两种签名方案配置完成后，均须**先安装 DspService，再安装 HostApp**：
 
 ```bash
 hdc install DspService/entry/build/default/outputs/default/entry-default-signed.hap
@@ -133,7 +184,7 @@ hdc install DspService/entry/build/default/outputs/default/entry-default-signed.
 
 或在 DevEco Studio 中直接 **Run** DspService 工程（Ability 为 DspServiceExtAbility，无 UI，安装即可）。
 
-### 4. 安装并运行 HostApp
+### 3. 安装并运行 HostApp
 
 ```bash
 hdc install HostApp/entry/build/default/outputs/default/entry-default-signed.hap
@@ -142,7 +193,7 @@ hdc shell aa start -a EntryAbility -b com.example.hostapp
 
 或在 DevEco Studio 中直接 **Run** HostApp 工程。
 
-### 5. 操作界面
+### 4. 操作界面
 
 1. 打开 HostApp，看到参数输入界面；
 2. 按需调整采样率（默认 44100）、帧数（默认 44100，即 1 秒）、增益（默认 0.5）、旁通开关；
@@ -187,10 +238,73 @@ hdc shell ps -ef | grep com.example.dspservice
 
 ## 常见问题
 
+### 💡 如何在不访问开发者控制台的情况下为 DspService 开启 AppService 能力？
+
+**结论：只需在 HostApp 的 `module.json5` 中声明 `ohos.permission.CONNECT_APP_SERVICE_EXTENSION_ABILITY` 权限即可——这是一个 `normal` 级、`system_grant` 权限，仅需代码声明，无需控制台审批，无需用户弹窗授权。**
+
+两侧的完整配置：
+
+| 侧 | 文件 | 需要配置的内容 |
+|----|------|----------------|
+| **DspService（服务端）** | `module.json5` | `extensionAbilities` 中声明 `type: "appService"` 和 `exported: true` ✓ |
+| **HostApp（调用方）** | `module.json5` | `requestPermissions` 中添加 `ohos.permission.CONNECT_APP_SERVICE_EXTENSION_ABILITY` ✓ |
+
+> **注意**：`ServiceExtensionAbility`（type: `"service"`）仅面向系统应用，三方应用必须使用 `AppServiceExtensionAbility`（type: `"appService"`）。
+
+#### `AppServiceExtensionAbility` vs `ServiceExtensionAbility`
+
+| 对比项 | `AppServiceExtensionAbility` | `ServiceExtensionAbility` |
+|--------|------------------------------|---------------------------|
+| 适用对象 | **三方应用** ✅ | 系统应用（需系统签名）❌ |
+| 注册类型 | `"appService"` | `"service"` |
+| 连接 API | `connectServiceExtensionAbility` | `connectServiceExtensionAbility` |
+| 调用方权限要求 | `ohos.permission.CONNECT_APP_SERVICE_EXTENSION_ABILITY`（代码声明即可） | 系统权限，三方应用不可使用 |
+
+---
+
+### ❓ 连接 DspService 失败，错误码 16000002
+
+| # | 原因 | 验证方法 | 解决方法 |
+|---|------|----------|----------|
+| 1 | **HostApp 未声明连接权限** | 检查 `HostApp/entry/src/main/module.json5` 是否有 `ohos.permission.CONNECT_APP_SERVICE_EXTENSION_ABILITY` | 添加该权限后重新构建安装 HostApp |
+| 2 | **DspService 旧版 HAP 仍在设备上** | `hdc shell bm dump -n com.example.dspservice \| grep type` | `hdc uninstall com.example.dspservice`，重新安装最新版本 |
+| 3 | **两个 HAP 签名账号不同** | DevEco Studio → File → Project Structure 确认两工程登录账号一致 | 两工程用同一华为账号自动签名，重新构建安装 |
+| 4 | **安装顺序错误** | — | 先安装 DspService，再安装 HostApp |
+| 5 | **同时开启两个调试会话** | 检查 DevEco Studio 是否为 DspService 也开了 Debug 标签 | DspService 只需安装，仅在 HostApp 工程启动调试 |
+| 6 | **Hvigor / AMS 缓存** | 重新构建后仍报错 | 卸载两个应用，重启设备，重新安装 |
+
+#### 错误码解析
+
+```
+内部错误 2097170 = 0x200012
+= AAFWK 子系统(1) × 2^21 + module(0) × 2^16 + errNo(18)
+= ERR_CROSS_BUNDLE_CONNECT_PERMISSION_DENIED（跨 Bundle 连接权限/鉴权失败）
+```
+
+最常见根因：HostApp 的 `module.json5` 中缺少 `ohos.permission.CONNECT_APP_SERVICE_EXTENSION_ABILITY`。
+
+#### 快速诊断命令
+
+```bash
+# 1. 确认 DspService 已安装且 type 为 appService
+hdc shell bm dump -n com.example.dspservice | grep -A5 "extensionAbilities"
+# 预期：name: DspServiceExtAbility, type: appService, exported: true
+
+# 2. 确认两个进程均在运行
+hdc shell ps -ef | grep "com.example"
+
+# 3. 实时查看 AMS / HostApp 日志
+hdc shell hilog | grep -E "HostApp|AbilityManagerService|ability_context"
+```
+
+---
+
+### 其他常见问题
+
 | 问题 | 原因 | 解决方法 |
 |------|------|----------|
 | 点击按钮后长时间显示"连接 DspService 失败" | DspService 未安装，或签名不匹配 | 先安装 DspService，确保签名配置正确 |
-| IPC 请求失败，errCode=-1 | DspService 崩溃或拒绝连接 | 查看 DspService 的 hilog；检查 `exported: true` |
+| IPC 请求失败，错误码：-1 | DspService 崩溃或拒绝连接 | 查看 DspService 的 hilog；检查 `exported: true` |
 | out.wav 无声或噪音 | gain=0 或参数异常 | 确认增益 > 0，旁通未误开 |
 | 找不到 out.wav | 写文件权限问题 | 文件写入 App 沙箱 `filesDir`，无需额外权限 |
 | 两个进程 PID 相同 | DspService 与 HostApp 是不同 Bundle，正常情况下进程不同 | 确认两个工程均已安装且签名正确 |
@@ -214,6 +328,6 @@ hdc shell ps -ef | grep com.example.dspservice
 ## 参考文档
 
 - [OpenHarmony IPC 开发指南](https://docs.openharmony.cn/pages/v5.0/zh-cn/application-dev/connectivity/ipc-rpc-overview.md)
-- [ServiceExtensionAbility 开发指南](https://docs.openharmony.cn/pages/v5.0/zh-cn/application-dev/application-models/serviceextensionability.md)
+- [AppServiceExtensionAbility 开发指南](https://developer.huawei.com/consumer/cn/doc/harmonyos-guides/app-service-extension-ability)
 - [N-API 开发指南](https://docs.openharmony.cn/pages/v5.0/zh-cn/application-dev/napi/napi-introduction.md)
 - [Ashmem API 参考](https://docs.openharmony.cn/pages/v5.0/zh-cn/application-dev/reference/apis-ipc-kit/js-apis-rpc.md)

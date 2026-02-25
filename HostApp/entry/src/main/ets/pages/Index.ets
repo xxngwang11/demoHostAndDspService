@@ -67,7 +67,23 @@ struct Index {
         },
         onFailed: (code: number) => {
           hilog.error(0x0000, TAG, 'connectServiceExtensionAbility failed, code=%{public}d', code);
-          reject(new Error(`连接 DspService 失败，错误码: ${code}`));
+          let hint: string;
+          if (code === 16000002) {
+            // AMS internal error 2097170 (ability_context_impl.cpp:1599).
+            // Root causes in priority order:
+            // A) HostApp module.json5 missing ohos.permission.CONNECT_APP_SERVICE_EXTENSION_ABILITY
+            // B) Old DspService HAP (wrong type) still on device — uninstall and reinstall
+            // C) Both HAPs not signed with the same developer account / appIdentifier
+            hint = '错误码 16000002（AMS 连接鉴权失败）。排查步骤：\n'
+              + '① 确认 HostApp/module.json5 已声明 ohos.permission.CONNECT_APP_SERVICE_EXTENSION_ABILITY\n'
+              + '② 卸载旧版 DspService：hdc uninstall com.example.dspservice，重新安装最新版本\n'
+              + '③ 两个工程必须使用同一华为开发者账号自动签名（Debug 模式）\n'
+              + '④ 安装顺序：先安装 DspService，再安装 HostApp\n'
+              + '⑤ 完成以上步骤后重启设备，再重新安装测试';
+          } else {
+            hint = `连接 DspService 失败，错误码: ${code}`;
+          }
+          reject(new Error(hint));
         },
       };
       this.connectionId = this.context.connectServiceExtensionAbility(want, opts);
@@ -146,7 +162,7 @@ struct Index {
 
       if (rr.errCode !== 0) {
         rr.reply.reclaim();
-        throw new Error(`IPC 请求失败，errCode=${rr.errCode}`);
+        throw new Error(`IPC 请求失败，错误码：${rr.errCode}`);
       }
 
       const dspStatus = rr.reply.readInt();
@@ -156,7 +172,7 @@ struct Index {
       rr.reply.reclaim();
 
       if (dspStatus !== 0) {
-        throw new Error(`DspService 处理失败，status=${dspStatus}`);
+        throw new Error(`DspService 处理失败，状态码：${dspStatus}`);
       }
 
       hilog.info(0x0000, TAG, 'IPC done, dspTimeNs=%{public}d ipcMs=%{public}d', dspTimeNs, ipcMs);
