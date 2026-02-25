@@ -86,12 +86,13 @@ demoHostAndDspService/
 | 方面 | 技术选型 |
 |------|----------|
 | ArkTS ↔ C++ 桥接 | N-API（OpenHarmony 标准方式） |
-| IPC 机制 | `rpc.MessageSequence` + `ServiceExtensionAbility`（type: `"service"`） |
+| IPC 机制 | `rpc.MessageSequence` + `AppServiceExtensionAbility`（type: `"appService"`） |
 | 共享内存 | `rpc.Ashmem.createAshmem` → 通过 `writeAshmem/readAshmem` 经 IPC 传递 fd |
 | 音频格式 | float32 interleaved PCM（内部），PCM-16 WAV（最终输出） |
 | DSP 算法 | `output = tanh(input × gain)`（soft clip 防溢出） |
 | 独立进程 | DspService 和 HostApp 是不同 Bundle，天然运行在不同进程中（`process` 字段仅支持 PC/平板；`extensionProcessMode` 用于同 Bundle 内多实例场景，跨 Bundle 无需配置） |
-| 服务类型选择 | 使用 `ServiceExtensionAbility`（type: `"service"`）而非 `AppServiceExtensionAbility`，无需在开发者控制台申请额外能力，调试自动签名即可运行 |
+| 服务类型 | `AppServiceExtensionAbility`（三方应用）；`ServiceExtensionAbility` 仅面向系统应用，三方应用不可使用 |
+| 连接权限 | HostApp `module.json5` 声明 `ohos.permission.CONNECT_APP_SERVICE_EXTENSION_ABILITY`（normal 级，system_grant，无需用户弹窗，无需开发者控制台审批） |
 
 ---
 
@@ -237,40 +238,57 @@ hdc shell ps -ef | grep com.example.dspservice
 
 ## 常见问题
 
-### 💡 为什么使用 `ServiceExtensionAbility` 而非 `AppServiceExtensionAbility`？
+### 💡 如何在不访问开发者控制台的情况下为 DspService 开启 AppService 能力？
 
-**结论：本 Demo 使用 `ServiceExtensionAbility`（type: `"service"`），无需访问华为开发者控制台，自动签名即可运行。**
+**结论：只需在 HostApp 的 `module.json5` 中声明 `ohos.permission.CONNECT_APP_SERVICE_EXTENSION_ABILITY` 权限即可——这是一个 `normal` 级、`system_grant` 权限，仅需代码声明，无需控制台审批，无需用户弹窗授权。**
+
+两侧的完整配置：
+
+| 侧 | 文件 | 需要配置的内容 |
+|----|------|----------------|
+| **DspService（服务端）** | `module.json5` | `extensionAbilities` 中声明 `type: "appService"` 和 `exported: true` ✓ |
+| **HostApp（调用方）** | `module.json5` | `requestPermissions` 中添加 `ohos.permission.CONNECT_APP_SERVICE_EXTENSION_ABILITY` ✓ |
+
+> **注意**：`ServiceExtensionAbility`（type: `"service"`）仅面向系统应用，三方应用必须使用 `AppServiceExtensionAbility`（type: `"appService"`）。
+
+#### `AppServiceExtensionAbility` vs `ServiceExtensionAbility`
 
 | 对比项 | `AppServiceExtensionAbility` | `ServiceExtensionAbility` |
 |--------|------------------------------|---------------------------|
+| 适用对象 | **三方应用** ✅ | 系统应用（需系统签名）❌ |
 | 注册类型 | `"appService"` | `"service"` |
 | 连接 API | `connectServiceExtensionAbility` | `connectServiceExtensionAbility` |
-| 是否需要开发者控制台开启 "AppService 服务" 能力 | **是** | **否** |
-| 调试自动签名是否可用 | 需额外 Profile 能力 | **开箱即用** |
-| 不满足能力要求时的报错 | `ability_context_impl.cpp:1599 failed 2097170` → `16000002` | 不会出现此错误 |
-
-`AppServiceExtensionAbility` 是为生产发布应用（需在应用市场上架、通过华为认证）设计的；对于开发阶段 Demo，`ServiceExtensionAbility` 是正确选择。
+| 调用方权限要求 | `ohos.permission.CONNECT_APP_SERVICE_EXTENSION_ABILITY`（代码声明即可） | 系统权限，三方应用不可使用 |
 
 ---
 
 ### ❓ 连接 DspService 失败，错误码 16000002
 
-切换到 `ServiceExtensionAbility` 后，此错误应不再出现。若仍出现，按以下步骤排查：
-
 | # | 原因 | 验证方法 | 解决方法 |
 |---|------|----------|----------|
-| 1 | **设备上仍安装着旧版 DspService**（type 仍为 appService）| `hdc shell bm dump -n com.example.dspservice \| grep type` | `hdc uninstall com.example.dspservice`，重新构建安装新版 |
-| 2 | **两个 HAP 签名账号不同** | DevEco Studio → File → Project Structure 确认两工程登录账号一致 | 两工程用同一华为账号自动签名，重新构建安装 |
-| 3 | **安装顺序错误** | — | 先安装 DspService，再安装 HostApp |
-| 4 | **同时开启两个调试会话** | 检查 DevEco Studio 是否为 DspService 也开了 Debug 标签 | DspService 只需安装，仅在 HostApp 工程启动调试 |
-| 5 | **Hvigor / AMS 缓存** | 重新构建后仍报错 | 卸载两个应用，重启设备，重新安装 |
+| 1 | **HostApp 未声明连接权限** | 检查 `HostApp/entry/src/main/module.json5` 是否有 `ohos.permission.CONNECT_APP_SERVICE_EXTENSION_ABILITY` | 添加该权限后重新构建安装 HostApp |
+| 2 | **DspService 旧版 HAP 仍在设备上** | `hdc shell bm dump -n com.example.dspservice \| grep type` | `hdc uninstall com.example.dspservice`，重新安装最新版本 |
+| 3 | **两个 HAP 签名账号不同** | DevEco Studio → File → Project Structure 确认两工程登录账号一致 | 两工程用同一华为账号自动签名，重新构建安装 |
+| 4 | **安装顺序错误** | — | 先安装 DspService，再安装 HostApp |
+| 5 | **同时开启两个调试会话** | 检查 DevEco Studio 是否为 DspService 也开了 Debug 标签 | DspService 只需安装，仅在 HostApp 工程启动调试 |
+| 6 | **Hvigor / AMS 缓存** | 重新构建后仍报错 | 卸载两个应用，重启设备，重新安装 |
+
+#### 错误码解析
+
+```
+内部错误 2097170 = 0x200012
+= AAFWK 子系统(1) × 2^21 + module(0) × 2^16 + errNo(18)
+= ERR_CROSS_BUNDLE_CONNECT_PERMISSION_DENIED（跨 Bundle 连接权限/鉴权失败）
+```
+
+最常见根因：HostApp 的 `module.json5` 中缺少 `ohos.permission.CONNECT_APP_SERVICE_EXTENSION_ABILITY`。
 
 #### 快速诊断命令
 
 ```bash
-# 1. 确认 DspService 已安装且 type 为 service（而非 appService）
+# 1. 确认 DspService 已安装且 type 为 appService
 hdc shell bm dump -n com.example.dspservice | grep -A5 "extensionAbilities"
-# 预期：name: DspServiceExtAbility, type: service, exported: true
+# 预期：name: DspServiceExtAbility, type: appService, exported: true
 
 # 2. 确认两个进程均在运行
 hdc shell ps -ef | grep "com.example"
@@ -278,16 +296,6 @@ hdc shell ps -ef | grep "com.example"
 # 3. 实时查看 AMS / HostApp 日志
 hdc shell hilog | grep -E "HostApp|AbilityManagerService|ability_context"
 ```
-
----
-
-### 🔍 历史分析：`[ability_context_impl.cpp:1599] failed 2097170` 的原因
-
-> **此问题已通过将 DspService 改为 `ServiceExtensionAbility` 从根本上解决，以下内容仅供参考。**
-
-当 DspService 使用 `AppServiceExtensionAbility`（type: `"appService"`）时，`connectServiceExtensionAbility` 请求到达 AMS 后，AMS 会检查调用方的 Provisioning Profile 中是否包含 "AppService 服务" 能力（capability entitlement）。若缺少此能力，AMS 在 `ability_context_impl.cpp:1599` 处以内部错误码 `2097170`（= AAFWK 子系统，module 0，errNo 18 = `ERR_CROSS_BUNDLE_CONNECT_PERMISSION_DENIED`）拒绝请求，最终映射至公开 API 错误 **16000002**。
-
-该能力必须在华为开发者控制台（Developer Console）为应用显式开启后重新生成 Profile，**无法仅在 DevEco Studio 中完成**。因此本 Demo 改为使用 `ServiceExtensionAbility`，彻底绕过此鉴权路径。
 
 ---
 
@@ -320,6 +328,6 @@ hdc shell hilog | grep -E "HostApp|AbilityManagerService|ability_context"
 ## 参考文档
 
 - [OpenHarmony IPC 开发指南](https://docs.openharmony.cn/pages/v5.0/zh-cn/application-dev/connectivity/ipc-rpc-overview.md)
-- [ServiceExtensionAbility 开发指南](https://docs.openharmony.cn/pages/v5.0/zh-cn/application-dev/application-models/serviceextensionability.md)
+- [AppServiceExtensionAbility 开发指南](https://developer.huawei.com/consumer/cn/doc/harmonyos-guides/app-service-extension-ability)
 - [N-API 开发指南](https://docs.openharmony.cn/pages/v5.0/zh-cn/application-dev/napi/napi-introduction.md)
 - [Ashmem API 参考](https://docs.openharmony.cn/pages/v5.0/zh-cn/application-dev/reference/apis-ipc-kit/js-apis-rpc.md)

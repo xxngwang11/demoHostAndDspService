@@ -1,9 +1,12 @@
 /**
  * DspServiceExtAbility.ets — DSP Service (独立进程侧)
  *
- * 以 ServiceExtensionAbility（type: "service"）运行，供第三方应用跨进程调用。
- * 使用 ServiceExtensionAbility 无需在华为开发者控制台申请任何额外能力（capability），
- * 调试签名（自动签名 Debug 模式）即可正常工作。
+ * 以 AppServiceExtensionAbility（type: "appService"）运行，供三方应用跨进程调用。
+ * AppServiceExtensionAbility 是 HarmonyOS 5.0（API 12）为三方应用提供的跨 Bundle 服务扩展类型；
+ * ServiceExtensionAbility 仅面向系统应用，三方应用应使用 AppServiceExtensionAbility。
+ *
+ * 调用方（HostApp）需在 module.json5 的 requestPermissions 中声明：
+ *   ohos.permission.CONNECT_APP_SERVICE_EXTENSION_ABILITY（normal 级，system_grant，无需用户授权）
  *
  * IPC 接口（通过 rpc.RemoteObject）:
  *   请求码 PROCESS_AUDIO_CODE (1001)
@@ -24,7 +27,7 @@
  *   [128+pcmSz..]     Output PCM (float32 interleaved)
  */
 
-import { ServiceExtensionAbility, Want } from '@kit.AbilityKit';
+import { AppServiceExtensionAbility, Want } from '@kit.AbilityKit';
 import { rpc } from '@kit.IPCKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import dspNative from 'libdspservice.so';
@@ -134,10 +137,10 @@ class DspRemoteStub extends rpc.RemoteObject {
 }
 
 /* ------------------------------------------------------------------ */
-/*  ServiceExtensionAbility                                             */
+/*  AppServiceExtensionAbility                                          */
 /* ------------------------------------------------------------------ */
 
-export default class DspServiceExtAbility extends ServiceExtensionAbility {
+export default class DspServiceExtAbility extends AppServiceExtensionAbility {
 
   private stub: DspRemoteStub = new DspRemoteStub();
 

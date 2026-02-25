@@ -69,17 +69,17 @@ struct Index {
           hilog.error(0x0000, TAG, 'connectServiceExtensionAbility failed, code=%{public}d', code);
           let hint: string;
           if (code === 16000002) {
-            // Internal AMS error 2097170 (ability_context_impl.cpp:1599).
-            // With the current ServiceExtensionAbility (type:"service") setup this
-            // should no longer occur. If it does, the most likely remaining causes are:
-            // A) Old HAP with AppServiceExtensionAbility still installed on device
-            // B) Both HAPs not signed with the same developer account
-            // C) DspService installed AFTER HostApp (install order matters)
-            hint = '错误码 16000002（AMS 连接失败）。排查步骤：\n'
-              + '① 卸载 DspService 旧版 HAP：hdc uninstall com.example.dspservice，重新安装最新版本\n'
-              + '② 两个工程必须使用同一华为开发者账号自动签名（Debug 模式）\n'
-              + '③ 安装顺序：先安装 DspService，再安装 HostApp\n'
-              + '④ 重启设备后再重新安装和测试';
+            // AMS internal error 2097170 (ability_context_impl.cpp:1599).
+            // Root causes in priority order:
+            // A) HostApp module.json5 missing ohos.permission.CONNECT_APP_SERVICE_EXTENSION_ABILITY
+            // B) Old DspService HAP (wrong type) still on device — uninstall and reinstall
+            // C) Both HAPs not signed with the same developer account / appIdentifier
+            hint = '错误码 16000002（AMS 连接鉴权失败）。排查步骤：\n'
+              + '① 确认 HostApp/module.json5 已声明 ohos.permission.CONNECT_APP_SERVICE_EXTENSION_ABILITY\n'
+              + '② 卸载旧版 DspService：hdc uninstall com.example.dspservice，重新安装最新版本\n'
+              + '③ 两个工程必须使用同一华为开发者账号自动签名（Debug 模式）\n'
+              + '④ 安装顺序：先安装 DspService，再安装 HostApp\n'
+              + '⑤ 完成以上步骤后重启设备，再重新安装测试';
           } else {
             hint = `连接 DspService 失败，错误码: ${code}`;
           }
