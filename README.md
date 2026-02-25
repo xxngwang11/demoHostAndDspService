@@ -86,11 +86,12 @@ demoHostAndDspService/
 | 方面 | 技术选型 |
 |------|----------|
 | ArkTS ↔ C++ 桥接 | N-API（OpenHarmony 标准方式） |
-| IPC 机制 | `rpc.MessageSequence` + `ServiceExtensionAbility` |
+| IPC 机制 | `rpc.MessageSequence` + `ServiceExtensionAbility`（type: `"service"`） |
 | 共享内存 | `rpc.Ashmem.createAshmem` → 通过 `writeAshmem/readAshmem` 经 IPC 传递 fd |
 | 音频格式 | float32 interleaved PCM（内部），PCM-16 WAV（最终输出） |
 | DSP 算法 | `output = tanh(input × gain)`（soft clip 防溢出） |
 | 独立进程 | DspService 和 HostApp 是不同 Bundle，天然运行在不同进程中（`process` 字段仅支持 PC/平板；`extensionProcessMode` 用于同 Bundle 内多实例场景，跨 Bundle 无需配置） |
+| 服务类型选择 | 使用 `ServiceExtensionAbility`（type: `"service"`）而非 `AppServiceExtensionAbility`，无需在开发者控制台申请额外能力，调试自动签名即可运行 |
 
 ---
 
@@ -236,104 +237,57 @@ hdc shell ps -ef | grep com.example.dspservice
 
 ## 常见问题
 
+### 💡 为什么使用 `ServiceExtensionAbility` 而非 `AppServiceExtensionAbility`？
+
+**结论：本 Demo 使用 `ServiceExtensionAbility`（type: `"service"`），无需访问华为开发者控制台，自动签名即可运行。**
+
+| 对比项 | `AppServiceExtensionAbility` | `ServiceExtensionAbility` |
+|--------|------------------------------|---------------------------|
+| 注册类型 | `"appService"` | `"service"` |
+| 连接 API | `connectServiceExtensionAbility` | `connectServiceExtensionAbility` |
+| 是否需要开发者控制台开启 "AppService 服务" 能力 | **是** | **否** |
+| 调试自动签名是否可用 | 需额外 Profile 能力 | **开箱即用** |
+| 不满足能力要求时的报错 | `ability_context_impl.cpp:1599 failed 2097170` → `16000002` | 不会出现此错误 |
+
+`AppServiceExtensionAbility` 是为生产发布应用（需在应用市场上架、通过华为认证）设计的；对于开发阶段 Demo，`ServiceExtensionAbility` 是正确选择。
+
+---
+
 ### ❓ 连接 DspService 失败，错误码 16000002
 
-错误码 16000002（`ERR_ABILITY_TYPE_INVALID`）由 AMS（Ability 管理服务）返回，表示"找到了目标 Ability，但类型不符"。  
-以下按可能性从高到低列出所有已知原因及解决方法：
+切换到 `ServiceExtensionAbility` 后，此错误应不再出现。若仍出现，按以下步骤排查：
 
 | # | 原因 | 验证方法 | 解决方法 |
 |---|------|----------|----------|
-| 1 | **Want 中包含 `moduleName` 字段** | 检查 `HostApp/Index.ets` 的 `connectDsp()` | 从 Want 中删除 `moduleName`，仅保留 `bundleName` + `abilityName` |
-| 2 | **DspService 旧版 HAP 仍在设备上**（注册信息未刷新）| `hdc shell bm dump -n com.example.dspservice` 检查 extensionAbilities | `hdc uninstall com.example.dspservice` 彻底卸载后重新安装 |
-| 3 | **两个 HAP 的 Debug/Release 模式不一致** | 检查 DevEco Studio 当前构建变体（左下角或 Build → Select Build Variant） | 两个工程均须以 **Debug** 模式构建签名；切勿将 Release HAP 与 Debug HAP 混合安装 |
-| 4 | **同时开启两个 DevEco Studio 调试会话** | 观察 DevEco Studio 是否为 DspService 也开了 Debug 标签页 | DspService 只需安装（Run 一次使其进设备即可），之后**仅在 HostApp 工程中**启动调试；DspService 无需保持调试状态 |
-| 5 | **设备 AMS 缓存未刷新** | 卸载重装后仍 16000002 | 完成上述步骤后**重启设备**，再重新安装并测试 |
-| 6 | **DspService 的 `module.json5` 中 `extensionProcessMode` 字段残留** | 检查 `DspService/entry/src/main/module.json5` | 删除 `extensionProcessMode` 字段（该字段仅用于同 Bundle 多实例场景，跨 Bundle 无效且会触发 16000002） |
-| 7 | **Hvigor 构建缓存损坏** | 清理后 rebuilt 报错 | DevEco Studio → **File → Invalidate Caches → Invalidate and Restart**，然后重新构建 |
-| 8 | **设备 HarmonyOS 版本不支持** | `hdc shell param get const.ohos.apiversion` 查看 API 版本 | `AppServiceExtensionAbility` 跨 Bundle 连接需要 HarmonyOS 5.0（API 12）或更高；旧版设备不支持 |
+| 1 | **设备上仍安装着旧版 DspService**（type 仍为 appService）| `hdc shell bm dump -n com.example.dspservice \| grep type` | `hdc uninstall com.example.dspservice`，重新构建安装新版 |
+| 2 | **两个 HAP 签名账号不同** | DevEco Studio → File → Project Structure 确认两工程登录账号一致 | 两工程用同一华为账号自动签名，重新构建安装 |
+| 3 | **安装顺序错误** | — | 先安装 DspService，再安装 HostApp |
+| 4 | **同时开启两个调试会话** | 检查 DevEco Studio 是否为 DspService 也开了 Debug 标签 | DspService 只需安装，仅在 HostApp 工程启动调试 |
+| 5 | **Hvigor / AMS 缓存** | 重新构建后仍报错 | 卸载两个应用，重启设备，重新安装 |
 
 #### 快速诊断命令
 
 ```bash
-# 1. 确认 DspService 已安装且 DspServiceExtAbility 已注册
+# 1. 确认 DspService 已安装且 type 为 service（而非 appService）
 hdc shell bm dump -n com.example.dspservice | grep -A5 "extensionAbilities"
-# 预期：看到 name: DspServiceExtAbility, type: appService, exported: true
+# 预期：name: DspServiceExtAbility, type: service, exported: true
 
-# 2. 确认两个进程已运行（DspService 连接时才会启动）
+# 2. 确认两个进程均在运行
 hdc shell ps -ef | grep "com.example"
 
-# 3. 实时查看 AMS / HostApp 错误日志
-hdc shell hilog | grep -E "HostApp|AbilityManagerService|AMS"
+# 3. 实时查看 AMS / HostApp 日志
+hdc shell hilog | grep -E "HostApp|AbilityManagerService|ability_context"
 ```
 
 ---
 
-### 🔍 日志中出现 `[ability_context_impl.cpp:1599] failed 2097170` 的深度分析
+### 🔍 历史分析：`[ability_context_impl.cpp:1599] failed 2097170` 的原因
 
-如果在 hilog 中看到类似以下日志：
+> **此问题已通过将 DspService 改为 `ServiceExtensionAbility` 从根本上解决，以下内容仅供参考。**
 
-```
-W ability_context_impl.cpp:1599 failed 2097170
-```
+当 DspService 使用 `AppServiceExtensionAbility`（type: `"appService"`）时，`connectServiceExtensionAbility` 请求到达 AMS 后，AMS 会检查调用方的 Provisioning Profile 中是否包含 "AppService 服务" 能力（capability entitlement）。若缺少此能力，AMS 在 `ability_context_impl.cpp:1599` 处以内部错误码 `2097170`（= AAFWK 子系统，module 0，errNo 18 = `ERR_CROSS_BUNDLE_CONNECT_PERMISSION_DENIED`）拒绝请求，最终映射至公开 API 错误 **16000002**。
 
-紧接着触发 `onFailed(16000002)`，说明问题**不是**简单的类型字段配置错误，而是 AMS 在跨 Bundle 鉴权层面拒绝了连接。
-
-#### 错误码解析
-
-```
-内部错误 2097170 = 0x200012
-= AAFWK 子系统(1) × 2^21 + module(0) × 2^16 + errNo(18)
-= AMS 模块 errNo=18 = ERR_CROSS_BUNDLE_CONNECT_PERMISSION_DENIED
-                       （跨 Bundle 连接权限/鉴权失败）
-```
-
-此错误由 `ability_context_impl.cpp` 内的 `ConnectServiceExtensionAbility` 向 AMS 发起跨进程调用时，AMS 内部鉴权逻辑返回后记录在日志，最终映射至公开 API 错误码 **16000002**。
-
-#### 最终根因清单（已排除前 8 项后仍 2097170）
-
-| 优先级 | 根因 | 说明 |
-|--------|------|------|
-| ⭐⭐⭐ | **DspService 的签名 Profile（.p7b）缺少 "AppService 服务" 能力（capability）** | `AppServiceExtensionAbility` 需要在华为开发者控制台为应用开启 **AppService 服务能力**，自动签名的 Profile 才会包含对应 entitlement。若 Profile 缺少此 capability，AMS 会以 errNo=18 拒绝跨 Bundle 连接。 |
-| ⭐⭐⭐ | **两个工程的 `appIdentifier` 不一致** | AMS 对 `AppServiceExtensionAbility` 跨 Bundle 连接会校验调用方与服务方的开发者身份（`appIdentifier`，来自签名证书）。若两工程在开发者控制台属于不同"项目"或使用了不同账号自动签名，`appIdentifier` 不同，鉴权失败。 |
-| ⭐⭐ | **设备固件版本过旧** | `connectServiceExtensionAbility` 内部以 `ExtensionAbilityType::SERVICE` 向 AMS 查询，早期 HarmonyOS 5.0.x 构建（< 5.0.0.700）的 AMS 未将 `APP_SERVICE` 类型纳入此路由，导致能力找不到并以 2097170 返回。 |
-| ⭐ | **调试模式下 Profile 校验更严格** | 部分设备在调试签名场景下会额外校验 Profile 内容完整性；若 Profile 无效或已过期（自动签名 Profile 通常有效期 1 年），连接会被拒绝。 |
-
-#### 解决步骤（针对 2097170）
-
-**方案一：为 DspService 开启 AppService 能力（最可能有效）**
-
-1. 登录 [华为开发者控制台](https://developer.huawei.com/consumer/cn/)
-2. 进入 **项目** → **应用（com.example.dspservice）** → **能力** → **服务能力**
-3. 找到并开启 **"AppService 服务"** 能力（如页面无此选项，说明当前项目类型不支持，需创建 HarmonyOS 应用项目）
-4. 回到 DevEco Studio，在 **DspService 工程** 中重新执行 **File → Project Structure → Signing Configs → Automatically generate signature**（重新生成包含新能力的 Profile）
-5. 重新构建并重装 DspService：
-
-   ```bash
-   hdc uninstall com.example.dspservice
-   # DevEco Studio Run DspService，或手动安装新 HAP
-   ```
-
-**方案二：核查 appIdentifier 是否一致**
-
-```bash
-# 解压 HostApp HAP（HAP 是 zip 文件），检查签名证书中的 appIdentifier
-unzip -p HostApp/entry/build/default/outputs/default/entry-default-signed.hap \
-  META-INF/CERT.RSA | keytool -printcert -v 2>/dev/null | grep -i "subject\|appidentifier"
-
-# 解压 DspService HAP，做同样检查
-unzip -p DspService/entry/build/default/outputs/default/entry-default-signed.hap \
-  META-INF/CERT.RSA | keytool -printcert -v 2>/dev/null | grep -i "subject\|appidentifier"
-# 两个输出中的 appIdentifier 字段必须完全一致
-```
-
-**方案三：更新设备固件**
-
-```bash
-# 检查当前系统版本
-hdc shell param get hw_sc.build.os.version
-# AppServiceExtensionAbility 跨 Bundle 连接需要 HarmonyOS 5.0.0.700 及以上
-# 若版本过旧，通过设备"设置 → 系统 → 软件更新"升级到最新版本
-```
+该能力必须在华为开发者控制台（Developer Console）为应用显式开启后重新生成 Profile，**无法仅在 DevEco Studio 中完成**。因此本 Demo 改为使用 `ServiceExtensionAbility`，彻底绕过此鉴权路径。
 
 ---
 

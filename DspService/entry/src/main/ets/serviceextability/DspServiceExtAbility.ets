@@ -1,7 +1,9 @@
 /**
  * DspServiceExtAbility.ets — DSP Service (独立进程侧)
  *
- * 以 AppServiceExtensionAbility 运行，供第三方应用跨进程调用（无需系统签名特权）。
+ * 以 ServiceExtensionAbility（type: "service"）运行，供第三方应用跨进程调用。
+ * 使用 ServiceExtensionAbility 无需在华为开发者控制台申请任何额外能力（capability），
+ * 调试签名（自动签名 Debug 模式）即可正常工作。
  *
  * IPC 接口（通过 rpc.RemoteObject）:
  *   请求码 PROCESS_AUDIO_CODE (1001)
@@ -22,7 +24,7 @@
  *   [128+pcmSz..]     Output PCM (float32 interleaved)
  */
 
-import { AppServiceExtensionAbility, Want } from '@kit.AbilityKit';
+import { ServiceExtensionAbility, Want } from '@kit.AbilityKit';
 import { rpc } from '@kit.IPCKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import dspNative from 'libdspservice.so';
@@ -132,10 +134,10 @@ class DspRemoteStub extends rpc.RemoteObject {
 }
 
 /* ------------------------------------------------------------------ */
-/*  AppServiceExtensionAbility                                          */
+/*  ServiceExtensionAbility                                             */
 /* ------------------------------------------------------------------ */
 
-export default class DspServiceExtAbility extends AppServiceExtensionAbility {
+export default class DspServiceExtAbility extends ServiceExtensionAbility {
 
   private stub: DspRemoteStub = new DspRemoteStub();
 

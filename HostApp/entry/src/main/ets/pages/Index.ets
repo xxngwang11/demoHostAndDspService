@@ -69,21 +69,17 @@ struct Index {
           hilog.error(0x0000, TAG, 'connectServiceExtensionAbility failed, code=%{public}d', code);
           let hint: string;
           if (code === 16000002) {
-            // Internal AMS error 2097170 (AAFWK errNo=18, ability_context_impl.cpp:1599)
-            // maps to this public code. Causes (in priority order):
-            // A) Provisioning Profile of DspService missing "AppService" service capability
-            // B) Both HAPs not signed under the same developer appid
-            // C) connectServiceExtensionAbility / AMS type routing gap on older firmware
-            hint = '错误码 16000002（AMS 内部错误 2097170，跨 Bundle 连接鉴权失败）。\n'
-              + '最常见原因及解法：\n'
-              + '① 【Profile 缺少 AppService 能力】在华为开发者控制台为 DspService 应用开启 "AppService 服务" 能力，\n'
-              + '   重新申请 Profile（.p7b），重新自动签名并重装 DspService。\n'
-              + '② 【两个工程 appid 不一致】两个工程必须登录同一华为开发者账号自动签名，\n'
-              + '   且在开发者控制台属于同一个"项目"，确保 appIdentifier 相同。\n'
-              + '③ 【设备固件过旧】检查固件版本：hdc shell param get hw_sc.build.os.version\n'
-              + '   AppServiceExtensionAbility 跨 Bundle 连接需要 HarmonyOS 5.0.0.700 及以上版本。\n'
-              + '④ 【先安装 DspService 再安装 HostApp，仅调试 HostApp】\n'
-              + '   DspService 只需 Run 安装一次，不要同时保持两个 Studio 调试会话。';
+            // Internal AMS error 2097170 (ability_context_impl.cpp:1599).
+            // With the current ServiceExtensionAbility (type:"service") setup this
+            // should no longer occur. If it does, the most likely remaining causes are:
+            // A) Old HAP with AppServiceExtensionAbility still installed on device
+            // B) Both HAPs not signed with the same developer account
+            // C) DspService installed AFTER HostApp (install order matters)
+            hint = '错误码 16000002（AMS 连接失败）。排查步骤：\n'
+              + '① 卸载 DspService 旧版 HAP：hdc uninstall com.example.dspservice，重新安装最新版本\n'
+              + '② 两个工程必须使用同一华为开发者账号自动签名（Debug 模式）\n'
+              + '③ 安装顺序：先安装 DspService，再安装 HostApp\n'
+              + '④ 重启设备后再重新安装和测试';
           } else {
             hint = `连接 DspService 失败，错误码: ${code}`;
           }
